@@ -1,16 +1,46 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: paybridge
   datasource:
     url: jdbc:postgresql://localhost:5432/paybridge
-    username: postgres
-    password: 12345678
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  threads:
+    virtual:
+      enabled: true   # Java 21+: request threads and @Async run on virtual threads
 
 server:
   port: 8080
+
+paybridge:
+  #  gateway: paystack
+  gateway: fake            # fake | paystack
+  dev-tools:
+    enabled: true          # /api/dev/** test deposits; turn off outside your laptop
+  kyc:
+    provider: fake
+    hash-secret: ${KYC_HASH_SECRET:dev-only-secret-change-me}   # min 16 chars; never reuse in production
+  fx:
+    provider: fixed
+    fixed-usd-ngn: 1520.00   # market (mid) rate; edit and restart to simulate the market moving
+    spread-percent: 1.5      # customer rate = mid x (1 - 1.5%)
+    quote-ttl: 5m
+  remittance:
+    partners: # onboarded IMTOs (invented names)
+      - LONDON_REMIT
+      - HOUSTON_SEND
+  notification:
+    provider: log
+  settlement:
+    ledger-check-cron: "0 0 1 * * *"   # 01:00 Lagos time
+
+paystack:
+  base-url: https://api.paystack.co
+  secret-key: ${PAYSTACK_SECRET_KEY:}
