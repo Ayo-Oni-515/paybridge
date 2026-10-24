@@ -12,7 +12,7 @@ import java.util.UUID;
  * Account details only. The balance lives in the ledger, so there is one source of truth.
  */
 @Entity
-@Table(name = "accounts")
+@Table(name = "accounts", indexes = @Index(name = "idx_account_customer", columnList = "customerId"))
 public class Account {
 
     @Id
@@ -21,6 +21,9 @@ public class Account {
 
     @Column(nullable = false, unique = true, length = 10)
     private String accountNumber;
+
+    /** Just the ID, not a @ManyToOne: the customer belongs to another module. */
+    private UUID customerId;
 
     @Column(nullable = false)
     private String holderName;
@@ -38,8 +41,9 @@ public class Account {
 
     protected Account() {}
 
-    Account(String accountNumber, String holderName, Currency currency) {
+    Account(String accountNumber, UUID customerId, String holderName, Currency currency) {
         this.accountNumber = accountNumber;
+        this.customerId = customerId;
         this.holderName = holderName;
         this.currency = currency;
         this.status = AccountStatus.ACTIVE;
@@ -49,6 +53,6 @@ public class Account {
     public UUID getId() { return id; }
 
     AccountView toView() {
-        return new AccountView(id, accountNumber, holderName, currency, status);
+        return new AccountView(id, accountNumber, customerId, holderName, currency, status);
     }
 }
