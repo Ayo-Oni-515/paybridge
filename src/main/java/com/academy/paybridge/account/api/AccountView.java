@@ -10,6 +10,7 @@ import java.util.UUID;
 public record AccountView(
         UUID id,
         String accountNumber,
+        UUID customerId,     // null only for accounts opened before customers existed
         String holderName,
         Currency currency,
         AccountStatus status
