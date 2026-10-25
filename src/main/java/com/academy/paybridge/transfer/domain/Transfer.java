@@ -124,6 +124,10 @@ public class Transfer {
         return reference;
     }
 
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
     public TransferStatus getStatus() {
         return status;
     }
