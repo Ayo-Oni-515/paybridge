@@ -3,6 +3,7 @@ package com.academy.paybridge.ledger.domain;
 import com.academy.paybridge.ledger.repository.LedgerAccountRepository;
 import com.academy.paybridge.ledger.repository.LedgerEntryRepository;
 import com.academy.paybridge.ledger.api.LedgerApi;
+import com.academy.paybridge.ledger.api.TrialBalanceLine;
 import com.academy.paybridge.shared.money.Currency;
 import com.academy.paybridge.shared.money.Money;
 import com.academy.paybridge.shared.exception.BusinessException;
@@ -72,6 +73,12 @@ public class LedgerService implements LedgerApi {
         // Double entry: two equal and opposite lines sharing one journal reference.
         entries.save(new LedgerEntry(journalReference, fromCode, EntryDirection.DEBIT, amount, description));
         entries.save(new LedgerEntry(journalReference, toCode, EntryDirection.CREDIT, amount, description));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TrialBalanceLine> trialBalance() {
+        return accounts.trialBalance();
     }
 
     private static BusinessException notFound(String code) {
