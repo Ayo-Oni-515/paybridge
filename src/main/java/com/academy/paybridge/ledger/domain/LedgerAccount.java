@@ -25,7 +25,8 @@ public class LedgerAccount {
     @Column(nullable = false)
     private boolean allowNegative;
 
-    protected LedgerAccount() {}
+    protected LedgerAccount() {
+    }
 
     LedgerAccount(String code, Currency currency, boolean allowNegative) {
         this.code = code;
@@ -37,7 +38,7 @@ public class LedgerAccount {
     void debit(BigDecimal amount) {
         BigDecimal newBalance = balance.subtract(amount);
         if (!allowNegative && newBalance.signum() < 0) {
-            throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY, "INSUFFICIENT_FUNDS", "Insufficient funds");
+            throw new BusinessException(HttpStatus.UNPROCESSABLE_CONTENT, "INSUFFICIENT_FUNDS", "Insufficient funds");
         }
         balance = newBalance;
     }
@@ -46,7 +47,15 @@ public class LedgerAccount {
         balance = balance.add(amount);
     }
 
-    public String getCode() { return code; }
-    public Currency getCurrency() { return currency; }
-    public BigDecimal getBalance() { return balance; }
+    public String getCode() {
+        return code;
+    }
+
+    public Currency getCurrency() {
+        return currency;
+    }
+
+    public BigDecimal getBalance() {
+        return balance;
+    }
 }
