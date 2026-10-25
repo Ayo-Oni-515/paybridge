@@ -9,23 +9,28 @@ import com.academy.paybridge.shared.money.Currency;
 import com.academy.paybridge.shared.money.Money;
 import com.academy.paybridge.shared.exception.BusinessException;
 import com.academy.paybridge.transfer.api.ExternalTransferRequest;
+import com.academy.paybridge.transfer.api.TransferApi;
+import com.academy.paybridge.transfer.api.TransferFinished;
+import com.academy.paybridge.transfer.api.TransferType;
 import com.academy.paybridge.transfer.api.InternalTransferRequest;
 import com.academy.paybridge.transfer.api.TransferStatus;
 import com.academy.paybridge.transfer.api.TransferView;
 import com.academy.paybridge.transfer.client.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
-public class TransferService {
+public class TransferService implements TransferApi {
 
     private static final Logger log = LoggerFactory.getLogger(TransferService.class);
 
@@ -34,14 +39,17 @@ public class TransferService {
     private final LedgerApi ledger;
     private final TransferGateway gateway;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher events;
 
     public TransferService(TransferRepository transfers, AccountApi accounts, LedgerApi ledger,
-                           TransferGateway gateway, PlatformTransactionManager txManager) {
+                           TransferGateway gateway, PlatformTransactionManager txManager,
+                           ApplicationEventPublisher events) {
         this.transfers = transfers;
         this.accounts = accounts;
         this.ledger = ledger;
         this.gateway = gateway;
         this.tx = new TransactionTemplate(txManager);
+        this.events = events;
     }
 
     // ------------------------------------------------------------------
@@ -72,6 +80,7 @@ public class TransferService {
                 accounts.ledgerCodeOf(destination.id()), amount, transfer.getNarration());
 
         transfer.markSuccessful();
+        publishFinished(transfer);
         return transfer.toView();
     }
 
@@ -79,6 +88,7 @@ public class TransferService {
     // EXTERNAL: PayBridge -> another bank, through the payment company.
     // Deliberately NOT one big transaction: never hold DB locks while waiting on the network.
     // ------------------------------------------------------------------
+    @Override
     public TransferView sendExternal(String idempotencyKey, ExternalTransferRequest request) {
         requireValidKey(idempotencyKey);
         Optional<Transfer> existing = transfers.findByIdempotencyKey(idempotencyKey);
@@ -150,14 +160,28 @@ public class TransferService {
                     accounts.ledgerCodeOf(transfer.getSourceAccountId()), amount, "Payout failed, refund");
             transfer.markFailed(reason);
         }
+        publishFinished(transfer);
         return transfer.toView();
     }
 
+    @Override
     @Transactional(readOnly = true)
     public TransferView get(UUID id) {
         return transfers.findById(id).map(Transfer::toView)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "TRANSFER_NOT_FOUND",
                         "Transfer not found: " + id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Money pendingExternalTotal() {
+        BigDecimal total = transfers.sumAmount(TransferType.EXTERNAL, TransferStatus.PENDING);
+        return Money.of(total == null ? BigDecimal.ZERO : total, Currency.NGN);
+    }
+
+    /** Notification and remittance listen for this; they run only after our transaction commits. */
+    private void publishFinished(Transfer transfer) {
+        events.publishEvent(new TransferFinished(transfer.toView(), transfer.getIdempotencyKey()));
     }
 
     private static void requireValidKey(String key) {
@@ -169,11 +193,11 @@ public class TransferService {
 
     private static void requireActiveNgn(AccountView account) {
         if (account.status() != AccountStatus.ACTIVE) {
-            throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY, "ACCOUNT_INACTIVE",
+            throw new BusinessException(HttpStatus.UNPROCESSABLE_CONTENT, "ACCOUNT_INACTIVE",
                     "Account " + account.accountNumber() + " is " + account.status());
         }
         if (account.currency() != Currency.NGN) {
-            throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY, "CURRENCY_NOT_SUPPORTED",
+            throw new BusinessException(HttpStatus.UNPROCESSABLE_CONTENT, "CURRENCY_NOT_SUPPORTED",
                     "Only NGN accounts can make transfers for now");
         }
     }
